@@ -32,28 +32,11 @@ public class JedisRateLimitService implements RateLimitService {
         for (RequestDescriptor requestDescriptor : requestDescriptors) {
             RateLimitRule appropriateRateLimitRule = findAppropriateRateLimitRule(requestDescriptor);
             if (appropriateRateLimitRule != null) {
-                String accountIdStr = requestDescriptor.getAccountId().orElse("");
-                String clientIpStr = requestDescriptor.getClientIp().orElse("");
-                String requestTypeStr = requestDescriptor.getRequestType().orElse("");
-                StringBuilder rateLimitRuleKey = new StringBuilder();
-                if (isNotBlank(accountIdStr)) {
-                    rateLimitRuleKey.append("accountId:").append(accountIdStr).append(REDIS_KEY_DELIMITER);
-                }
-                if (isNotBlank(clientIpStr)) {
-                    rateLimitRuleKey.append("clientIp:").append(clientIpStr).append(REDIS_KEY_DELIMITER);
-                }
-                if (isNotBlank(requestTypeStr)) {
-                    rateLimitRuleKey.append("requestType:").append(requestTypeStr).append(REDIS_KEY_DELIMITER);
-                }
-
                 RateLimitTimeInterval timeInterval = appropriateRateLimitRule.getTimeInterval();
-                rateLimitRuleKey.append(timeInterval.name().toLowerCase());
-                rateLimitRuleKey.append(REDIS_KEY_DELIMITER);
-
                 long unixTime = timeInterval == RateLimitTimeInterval.HOUR ? currentHourInUnix : currentMinuteInUnix;
-                rateLimitRuleKey.append(unixTime);
 
-                String rateLimitRuleKeyStr = rateLimitRuleKey.toString();
+                String rateLimitRuleKeyStr = getRateLimitRuleKey(requestDescriptor, timeInterval, unixTime);
+
                 String currentRequestAmount = jedisCluster.get(rateLimitRuleKeyStr);
                 if (currentRequestAmount != null && Integer.parseInt(currentRequestAmount) >= appropriateRateLimitRule.getAllowedNumberOfRequests()) {
                     return true;
@@ -63,6 +46,29 @@ public class JedisRateLimitService implements RateLimitService {
             }
         }
         return false;
+    }
+
+    private String getRateLimitRuleKey(RequestDescriptor requestDescriptor, RateLimitTimeInterval timeInterval, long unixTime) {
+        String accountIdStr = requestDescriptor.getAccountId().orElse("");
+        String clientIpStr = requestDescriptor.getClientIp().orElse("");
+        String requestTypeStr = requestDescriptor.getRequestType().orElse("");
+        StringBuilder rateLimitRuleKey = new StringBuilder();
+        if (isNotBlank(accountIdStr)) {
+            rateLimitRuleKey.append("accountId:").append(accountIdStr).append(REDIS_KEY_DELIMITER);
+        }
+        if (isNotBlank(clientIpStr)) {
+            rateLimitRuleKey.append("clientIp:").append(clientIpStr).append(REDIS_KEY_DELIMITER);
+        }
+        if (isNotBlank(requestTypeStr)) {
+            rateLimitRuleKey.append("requestType:").append(requestTypeStr).append(REDIS_KEY_DELIMITER);
+        }
+
+        rateLimitRuleKey.append(timeInterval.name().toLowerCase());
+        rateLimitRuleKey.append(REDIS_KEY_DELIMITER);
+
+        rateLimitRuleKey.append(unixTime);
+
+        return rateLimitRuleKey.toString();
     }
 
     private RateLimitRule findAppropriateRateLimitRule(RequestDescriptor requestDescriptor) {
